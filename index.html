@@ -36,14 +36,14 @@ button { width:100%; margin-top:10px; font-size:17px; padding:14px; border:0; bo
 </form>
 <script>
 (function () {
-  var SALT = "YgWgDSl+rbbPxdvC5gxW/A==", IV = "1WModTjdsXaFEUxs", ITER = 600000, KEY_STORE = "trip-key";
+  var SALT = "YgWgDSl+rbbPxdvC5gxW/A==", ITER = 600000, KEY_STORE = "trip-key";
   function b64(s) { var b = atob(s), u = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
   function toB64(buf) { var s = "", u = new Uint8Array(buf); for (var i = 0; i < u.length; i++) s += String.fromCharCode(u[i]); return btoa(s); }
-  var payload = fetch("payload.bin").then(function (r) { if (!r.ok) throw new Error("payload"); return r.arrayBuffer(); });
+  var payload = fetch("payload.bin", { cache: "no-cache" }).then(function (r) { if (!r.ok) throw new Error("payload"); return r.arrayBuffer(); });
 
   function show(html) { document.open(); document.write(html); document.close(); }
   function decrypt(key) {
-    return payload.then(function (ct) { return crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(IV) }, key, ct); })
+    return payload.then(function (buf) { return crypto.subtle.decrypt({ name: "AES-GCM", iv: new Uint8Array(buf, 0, 12) }, key, new Uint8Array(buf, 12)); })
       .then(function (pt) { return new TextDecoder().decode(pt); });
   }
   function importRaw(raw) { return crypto.subtle.importKey("raw", raw, "AES-GCM", true, ["decrypt"]); }
@@ -71,5 +71,5 @@ button { width:100%; margin-top:10px; font-size:17px; padding:14px; border:0; bo
   });
 })();
 </script>
-<script>if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js").catch(function(){});}</script></body>
+<script>if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js").then(function(r){r.update();}).catch(function(){});}</script></body>
 </html>
