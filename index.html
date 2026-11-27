@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="도쿄 여행">
+<meta name="theme-color" content="#f8f8fc">
+<title>우리의 도쿄 여행</title>
+<style>
+:root { color-scheme: light; --bg:#f8f8fc; --ink:#2f3150; --muted:#7b7f9c; --accent:#f0677c; --line:#e7e8f3; }
+* { box-sizing: border-box; }
+body { margin:0; min-height:100vh; min-height:100dvh; display:grid; place-items:center; background:var(--bg); color:var(--ink);
+  font-family:"Apple SD Gothic Neo", system-ui, sans-serif; padding:24px 16px; }
+#lock { width:100%; max-width:340px; text-align:center; }
+#lock[hidden] { display:none; }
+h1 { font-size:22px; margin:0 0 6px; }
+p { color:var(--muted); font-size:14px; margin:0 0 20px; }
+input { width:100%; font-size:17px; padding:14px; border:1px solid var(--line); border-radius:14px; background:#fff; color:var(--ink); -webkit-appearance:none; }
+button { width:100%; margin-top:10px; font-size:17px; padding:14px; border:0; border-radius:14px; background:var(--accent); color:#fff; font-weight:600; -webkit-appearance:none; }
+#err { color:#c94459; font-size:14px; min-height:20px; margin-top:10px; }
+</style>
+</head>
+<body>
+<form id="lock" hidden autocomplete="off">
+  <h1>우리의 도쿄 여행</h1>
+  <p>처음 한 번만 암호를 입력하면 이 기기에 기억됩니다.</p>
+  <input id="pw" type="password" placeholder="암호" autocapitalize="off" autocorrect="off" spellcheck="false" required>
+  <button type="submit">열기</button>
+  <div id="err" role="alert"></div>
+</form>
+<script>
+(function () {
+  var SALT = "YgWgDSl+rbbPxdvC5gxW/A==", IV = "1WModTjdsXaFEUxs", ITER = 600000, KEY_STORE = "trip-key";
+  function b64(s) { var b = atob(s), u = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
+  function toB64(buf) { var s = "", u = new Uint8Array(buf); for (var i = 0; i < u.length; i++) s += String.fromCharCode(u[i]); return btoa(s); }
+  var payload = fetch("payload.bin").then(function (r) { if (!r.ok) throw new Error("payload"); return r.arrayBuffer(); });
+
+  function show(html) { document.open(); document.write(html); document.close(); }
+  function decrypt(key) {
+    return payload.then(function (ct) { return crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(IV) }, key, ct); })
+      .then(function (pt) { return new TextDecoder().decode(pt); });
+  }
+  function importRaw(raw) { return crypto.subtle.importKey("raw", raw, "AES-GCM", true, ["decrypt"]); }
+  function derive(pass) {
+    return crypto.subtle.importKey("raw", new TextEncoder().encode(pass), "PBKDF2", false, ["deriveKey"])
+      .then(function (km) { return crypto.subtle.deriveKey({ name: "PBKDF2", salt: b64(SALT), iterations: ITER, hash: "SHA-256" }, km, { name: "AES-GCM", length: 256 }, true, ["decrypt"]); });
+  }
+  var form = document.getElementById("lock"), err = document.getElementById("err");
+  function askPass() { form.hidden = false; document.getElementById("pw").focus(); }
+
+  var saved = null; try { saved = localStorage.getItem(KEY_STORE); } catch (e) {}
+  if (saved) {
+    importRaw(b64(saved)).then(decrypt).then(show).catch(function () { try { localStorage.removeItem(KEY_STORE); } catch (e) {} askPass(); });
+  } else askPass();
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault(); err.textContent = "여는 중…";
+    var key;
+    derive(document.getElementById("pw").value).then(function (k) { key = k; return decrypt(k); })
+      .then(function (html) {
+        return crypto.subtle.exportKey("raw", key).then(function (raw) { try { localStorage.setItem(KEY_STORE, toB64(raw)); } catch (x) {} return html; });
+      })
+      .then(show)
+      .catch(function () { err.textContent = "암호가 맞지 않거나, 처음 실행이라 인터넷 연결이 필요합니다."; });
+  });
+})();
+</script>
+<script>if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js").catch(function(){});}</script></body>
+</html>
